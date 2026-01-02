@@ -41,8 +41,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY app ./app
 
-# Copy data folder for agent configurations (will be overwritten by volume mount)
-COPY data ./data
+# Create data directory for agent configurations (persisted via volume)
+RUN mkdir -p /app/data && \
+    echo '{"agents": []}' > /app/data/agents.json
 
 # Create non-root user and set permissions
 RUN useradd -m -u 1000 appuser && \
@@ -59,4 +60,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
