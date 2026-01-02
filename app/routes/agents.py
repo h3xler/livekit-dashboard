@@ -24,8 +24,7 @@ def is_agents_enabled() -> bool:
     return os.environ.get("ENABLE_AGENTS", "true").lower() == "true"
 
 
-@router.get("/agents", response_class=HTMLResponse)
-@requires_admin
+@router.get("/agents", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def agents_index(
     request: Request,
     agent_service: AgentService = Depends(get_agent_service),
@@ -59,12 +58,12 @@ async def agents_index(
             "flash_message": flash_message,
             "flash_type": flash_type,
             "csrf_token": get_csrf_token(request),
+            "sip_enabled": os.environ.get("ENABLE_SIP", "false").lower() == "true",
         },
     )
 
 
-@router.post("/agents/create", response_class=HTMLResponse)
-@requires_admin
+@router.post("/agents/create", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def create_agent(
     request: Request,
     csrf_token: str = Form(...),
@@ -107,8 +106,7 @@ async def create_agent(
         )
 
 
-@router.post("/agents/{agent_id}/update", response_class=HTMLResponse)
-@requires_admin
+@router.post("/agents/{agent_id}/update", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def update_agent(
     request: Request,
     agent_id: str,
@@ -158,8 +156,7 @@ async def update_agent(
         )
 
 
-@router.post("/agents/{agent_id}/delete", response_class=HTMLResponse)
-@requires_admin
+@router.post("/agents/{agent_id}/delete", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def delete_agent(
     request: Request,
     agent_id: str,
@@ -191,8 +188,7 @@ async def delete_agent(
         )
 
 
-@router.post("/agents/{agent_id}/toggle", response_class=HTMLResponse)
-@requires_admin
+@router.post("/agents/{agent_id}/toggle", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def toggle_agent(
     request: Request,
     agent_id: str,
@@ -225,8 +221,7 @@ async def toggle_agent(
         )
 
 
-@router.post("/agents/{agent_id}/test", response_class=HTMLResponse)
-@requires_admin
+@router.post("/agents/{agent_id}/test", response_class=HTMLResponse, dependencies=[Depends(requires_admin)])
 async def test_agent(
     request: Request,
     agent_id: str,
@@ -296,6 +291,7 @@ async def test_agent(
                 "token": token,
                 "livekit_url": os.environ.get("LIVEKIT_URL", ""),
                 "csrf_token": get_csrf_token(request),
+                "sip_enabled": os.environ.get("ENABLE_SIP", "false").lower() == "true",
             },
         )
     except Exception as e:
