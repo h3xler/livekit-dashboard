@@ -78,7 +78,7 @@ async def create_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ):
     """Create a new agent configuration"""
-    verify_csrf_token(request, csrf_token)
+    await verify_csrf_token(request)
     
     try:
         agent = AgentConfig(
@@ -122,7 +122,7 @@ async def update_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ):
     """Update an existing agent configuration"""
-    verify_csrf_token(request, csrf_token)
+    await verify_csrf_token(request)
     
     try:
         updated = agent_service.update_agent(
@@ -164,7 +164,7 @@ async def delete_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ):
     """Delete an agent configuration"""
-    verify_csrf_token(request, csrf_token)
+    await verify_csrf_token(request)
     
     try:
         deleted = agent_service.delete_agent(agent_id)
@@ -196,7 +196,7 @@ async def toggle_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ):
     """Toggle agent enabled/disabled status"""
-    verify_csrf_token(request, csrf_token)
+    await verify_csrf_token(request)
     
     try:
         agent = agent_service.toggle_agent(agent_id)
@@ -230,7 +230,7 @@ async def test_agent(
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Test an agent by creating a test room and dispatching the agent"""
-    verify_csrf_token(request, csrf_token)
+    await verify_csrf_token(request)
     
     agent = agent_service.get_agent(agent_id)
     if not agent:
