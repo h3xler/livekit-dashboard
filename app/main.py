@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.routes import overview, rooms, egress, sip, settings, sandbox, auth
+from app.routes import overview, rooms, egress, sip, settings, sandbox, auth, agents
 from app.security.csrf import get_csrf_token
 
 
@@ -95,6 +95,7 @@ app.include_router(sip.router, tags=["SIP"])
 app.include_router(settings.router, tags=["Settings"])
 app.include_router(sandbox.router, tags=["Sandbox"])
 app.include_router(auth.router, tags=["Auth"])
+app.include_router(agents.router, tags=["Agents"])
 
 
 # Security headers middleware
@@ -120,7 +121,7 @@ async def add_security_headers(request: Request, call_next):
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "font-src 'self' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
-        "connect-src 'self';"
+        "connect-src 'self' wss: ws:;"
     )
     response.headers["Content-Security-Policy"] = csp
 
