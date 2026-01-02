@@ -26,6 +26,11 @@ services:
 
       # Feature Flags
       ENABLE_SIP: ${ENABLE_SIP:-true}
+      ENABLE_AGENTS: ${ENABLE_AGENTS:-true}
+
+    # Volume for persistent agent configurations
+    volumes:
+      - livekit_dashboard_data:/app/data
 
     restart: unless-stopped
 
@@ -54,7 +59,12 @@ services:
         max-size: "10m"
         max-file: "3"
 
+# Volumes for persistent storage
+volumes:
+  livekit_dashboard_data:
+
 # Optional: Network configuration
 networks:
   default:
     name: livekit-network
+
