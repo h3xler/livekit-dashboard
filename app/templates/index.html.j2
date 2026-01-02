@@ -1,667 +1,338 @@
 {% extends "base.html.j2" %}
 
-{% block title %}Overview - LiveKit Dashboard{% endblock %}
+{% block title %}Agents - LiveKit Dashboard{% endblock %}
 
 {% block page_header %}
 <div class="d-flex justify-content-between align-items-center w-100">
     <div>
-        <h1 class="page-title">Overview</h1>
+        <h1 class="page-title">Agents</h1>
         <div class="page-subtitle">
-            Last updated <span id="last-updated">{{ last_updated }}</span> ago
+            Manage your voice AI agents
         </div>
     </div>
-    <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-secondary" onclick="toggleAutoRefresh()">
-            <i class="bi bi-arrow-clockwise"></i>
-            <span id="auto-refresh-text">Auto-refresh off</span>
+    <div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAgentModal">
+            <i class="bi bi-plus-lg"></i> Create Agent
         </button>
-        <select class="form-select form-select-sm" style="width: auto;" id="time-range">
-            <option value="7">Past 7 days</option>
-            <option value="30">Past 30 days</option>
-            <option value="90">Past 90 days</option>
-        </select>
     </div>
 </div>
 {% endblock %}
 
 {% block content %}
-<!-- Get Started Section -->
-<div class="get-started-section">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="section-title">Get started</h5>
-        <button class="btn-dismiss" onclick="dismissGetStarted()">Dismiss</button>
-    </div>
-    <div class="quickstart-grid">
-        <div class="quickstart-card">
-            <div class="quickstart-icon">
-                <i class="bi bi-play-circle"></i>
-            </div>
-            <div class="quickstart-content">
-                <h6 class="quickstart-title">Try sandbox</h6>
-                <p class="quickstart-description">The fastest way to test cloud apps</p>
-            </div>
+<!-- Flash Message -->
+{% if flash_message %}
+<div class="alert alert-{{ 'success' if flash_type == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+    {{ flash_message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Agents Table -->
+<div class="card">
+    <div class="card-body">
+        {% if agents %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Name</th>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Voice</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent in agents %}
+                    <tr>
+                        <td>
+                            <form method="POST" action="/agents/{{ agent.id }}/toggle" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent">
+                                    {% if agent.enabled %}
+                                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Enabled</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary"><i class="bi bi-pause-circle"></i> Disabled</span>
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </td>
+                        <td>
+                            <strong>{{ agent.name }}</strong>
+                            {% if agent.n8n_mcp_url %}
+                            <br><small class="text-muted"><i class="bi bi-link-45deg"></i> MCP Connected</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ model_providers.get(agent.model_provider, {}).get('name', agent.model_provider) }}</td>
+                        <td><code>{{ agent.model }}</code></td>
+                        <td>{{ agent.voice }}</td>
+                        <td>
+                            <div class="btn-group">
+                                <form method="POST" action="/agents/{{ agent.id }}/test" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary" {% if not agent.enabled %}disabled{% endif %} title="Test Agent">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                        onclick="editAgent('{{ agent.id }}', '{{ agent.name }}', '{{ agent.model_provider }}', '{{ agent.model }}', '{{ agent.voice }}', '{{ agent.first_message | replace("'", "\\'") }}', {{ 'true' if agent.noise_cancellation else 'false' }}, '{{ agent.n8n_mcp_url }}', '{{ agent.metadata }}')"
+                                        title="Edit Agent">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmDelete('{{ agent.id }}', '{{ agent.name }}')"
+                                        title="Delete Agent">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        
-        <a href="https://docs.livekit.io/agents/quickstart/" target="_blank" class="quickstart-card">
-            <div class="quickstart-icon">
-                <i class="bi bi-mic"></i>
-            </div>
-            <div class="quickstart-content">
-                <h6 class="quickstart-title">Voice AI quickstart <i class="bi bi-arrow-up-right"></i></h6>
-                <p class="quickstart-description">Build your first voice AI agent in under 10 minutes</p>
-            </div>
-        </a>
-        
-        <a href="https://docs.livekit.io/sip/" target="_blank" class="quickstart-card">
-            <div class="quickstart-icon">
-                <i class="bi bi-telephone"></i>
-            </div>
-            <div class="quickstart-content">
-                <h6 class="quickstart-title">Telephony integrations <i class="bi bi-arrow-up-right"></i></h6>
-                <p class="quickstart-description">Connect LiveKit to a telephone system using SIP</p>
-            </div>
-        </a>
-        
-        <a href="https://docs.livekit.io/home/get-started/quickstarts/" target="_blank" class="quickstart-card">
-            <div class="quickstart-icon">
-                <i class="bi bi-file-code"></i>
-            </div>
-            <div class="quickstart-content">
-                <h6 class="quickstart-title">Find your SDK quickstart <i class="bi bi-arrow-up-right"></i></h6>
-                <p class="quickstart-description">Quickstarts for every platform</p>
-            </div>
-        </a>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-robot" style="font-size: 3rem; color: var(--lk-text-muted);"></i>
+            <h5 class="mt-3">No Agents Configured</h5>
+            <p class="text-muted">Create your first voice AI agent to get started.</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAgentModal">
+                <i class="bi bi-plus-lg"></i> Create Agent
+            </button>
+        </div>
+        {% endif %}
     </div>
 </div>
 
-<!-- Analytics Metrics -->
-<div class="analytics-grid">
-    <div class="metric-card">
-        <div class="metric-header">
-            <span class="metric-title">Connection success</span>
-            <i class="bi bi-info-circle text-muted"></i>
-        </div>
-        <div class="metric-value">
-            <span class="metric-number">{{ analytics.connection_success }}%</span>
-        </div>
-    </div>
-    
-    <div class="metric-card">
-        <div class="metric-header">
-            <span class="metric-title">Platforms</span>
-            <i class="bi bi-info-circle text-muted"></i>
-        </div>
-        <div class="metric-body">
-            {% if analytics.platforms %}
-                <canvas id="platformsChart" height="150"></canvas>
-            {% else %}
-                <div class="no-data-message">No data for the selected time range.</div>
-            {% endif %}
-        </div>
-    </div>
-    
-    <div class="metric-card">
-        <div class="metric-header">
-            <span class="metric-title">Connection type</span>
-            <i class="bi bi-info-circle text-muted"></i>
-        </div>
-        <div class="metric-body">
-            {% if analytics.connection_types %}
-                <canvas id="connectionTypeChart" height="150"></canvas>
-            {% else %}
-                <div class="no-data-message">No data for the selected time range.</div>
-            {% endif %}
-        </div>
-    </div>
-    
-    <div class="metric-card">
-        <div class="metric-header">
-            <span class="metric-title">Connection minutes</span>
-            <i class="bi bi-info-circle text-muted"></i>
-        </div>
-        <div class="metric-value">
-            <span class="metric-number">{{ analytics.connection_minutes }}</span>
-            <span class="metric-unit">min</span>
+<!-- Create Agent Modal -->
+<div class="modal fade" id="createAgentModal" tabindex="-1" aria-labelledby="createAgentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="/agents/create">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createAgentModalLabel"><i class="bi bi-robot"></i> Create New Agent</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">Agent Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required placeholder="e.g., Customer Support Agent">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="model_provider" class="form-label">Model Provider</label>
+                            <select class="form-select" id="model_provider" name="model_provider" onchange="updateModels(this.value)">
+                                {% for key, provider in model_providers.items() %}
+                                <option value="{{ key }}" {% if key == 'google' %}selected{% endif %}>{{ provider.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="model" class="form-label">Model</label>
+                            <select class="form-select" id="model" name="model">
+                                {% for model in model_providers.google.models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="voice" class="form-label">Voice</label>
+                            <select class="form-select" id="voice" name="voice">
+                                {% for voice in voices.google %}
+                                <option value="{{ voice }}">{{ voice }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="first_message" class="form-label">First Message</label>
+                        <textarea class="form-control" id="first_message" name="first_message" rows="2" placeholder="Hello! How can I help you today?">Hello! How can I help you today?</textarea>
+                        <small class="text-muted">The greeting message the agent will say when joining a call.</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="noise_cancellation" name="noise_cancellation" checked>
+                                <label class="form-check-label" for="noise_cancellation">Noise Cancellation</label>
+                            </div>
+                            <small class="text-muted">Enable background noise suppression</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="n8n_mcp_url" class="form-label">n8n MCP Server URL <span class="badge bg-info">Optional</span></label>
+                        <input type="url" class="form-control" id="n8n_mcp_url" name="n8n_mcp_url" placeholder="http://n8n:5678/webhook/mcp">
+                        <small class="text-muted">Connect to n8n workflows as tools for the agent.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="metadata" class="form-label">Metadata <span class="badge bg-secondary">Optional</span></label>
+                        <textarea class="form-control" id="metadata" name="metadata" rows="2" placeholder='{"custom_field": "value"}'></textarea>
+                        <small class="text-muted">Additional metadata in JSON format.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Agent</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
-<!-- Expandable Analytics Sections -->
-<div class="expandable-sections">
-    <!-- Bandwidth -->
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('bandwidth')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="bandwidth-arrow"></i>
-                <span>Bandwidth</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="bandwidth-content">
-            <div class="section-placeholder">
-                <p class="text-muted">Bandwidth analytics will be displayed here.</p>
-            </div>
+<!-- Edit Agent Modal -->
+<div class="modal fade" id="editAgentModal" tabindex="-1" aria-labelledby="editAgentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" id="editAgentForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editAgentModalLabel"><i class="bi bi-pencil"></i> Edit Agent</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_name" class="form-label">Agent Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit_name" name="name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_model_provider" class="form-label">Model Provider</label>
+                            <select class="form-select" id="edit_model_provider" name="model_provider" onchange="updateModels(this.value, 'edit_')">
+                                {% for key, provider in model_providers.items() %}
+                                <option value="{{ key }}">{{ provider.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_model" class="form-label">Model</label>
+                            <select class="form-select" id="edit_model" name="model">
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_voice" class="form-label">Voice</label>
+                            <select class="form-select" id="edit_voice" name="voice">
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_first_message" class="form-label">First Message</label>
+                        <textarea class="form-control" id="edit_first_message" name="first_message" rows="2"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="edit_noise_cancellation" name="noise_cancellation">
+                                <label class="form-check-label" for="edit_noise_cancellation">Noise Cancellation</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_n8n_mcp_url" class="form-label">n8n MCP Server URL</label>
+                        <input type="url" class="form-control" id="edit_n8n_mcp_url" name="n8n_mcp_url">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_metadata" class="form-label">Metadata</label>
+                        <textarea class="form-control" id="edit_metadata" name="metadata" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
-    
-    <!-- Participants -->
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('participants')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="participants-arrow"></i>
-                <span>Participants</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="participants-content">
-            <div class="section-placeholder">
-                <div class="stats-row">
-                    <div class="stat-item">
-                        <div class="stat-label-small">Total Participants</div>
-                        <div class="stat-value-small">{{ server_info.participants_count }}</div>
-                    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteAgentModal" tabindex="-1" aria-labelledby="deleteAgentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="deleteAgentForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteAgentModalLabel"><i class="bi bi-exclamation-triangle text-danger"></i> Delete Agent</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-            </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the agent "<strong id="deleteAgentName"></strong>"?</p>
+                    <p class="text-danger"><small>This action cannot be undone.</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
         </div>
     </div>
-    
-    <!-- Rooms -->
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('rooms')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="rooms-arrow"></i>
-                <span>Rooms</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="rooms-content">
-            {% if room_analytics %}
-            <div class="analytics-grid mb-4">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Active Rooms</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ room_analytics.active_rooms }}</span>
-                    </div>
-                    <div class="metric-details">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Total:</span>
-                            <span>{{ room_analytics.total_rooms }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Empty:</span>
-                            <span>{{ room_analytics.empty_rooms }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Participants</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ room_analytics.total_participants }}</span>
-                    </div>
-                    <div class="metric-subtitle text-muted">Avg: {{ room_analytics.avg_participants }} per room</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Room Sizes</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-body">
-                        {% if room_analytics.room_sizes and room_analytics.room_sizes.values() | sum > 0 %}
-                            <canvas id="roomSizesChart" height="150"></canvas>
-                        {% else %}
-                            <div class="no-data-message">No active rooms.</div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">API Latency</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ room_analytics.api_latency_ms }}</span>
-                        <span class="metric-unit">ms</span>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-            
-            <div class="mt-3">
-                <a href="/rooms" class="btn btn-sm btn-primary">View All Rooms</a>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Egress -->
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('egress')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="egress-arrow"></i>
-                <span>Egress</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="egress-content">
-            {% if egress_analytics %}
-            <div class="analytics-grid mb-4">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Active Jobs</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ egress_analytics.active_jobs }}</span>
-                    </div>
-                    <div class="metric-details">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Completed:</span>
-                            <span>{{ egress_analytics.completed_jobs }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Failed:</span>
-                            <span>{{ egress_analytics.failed_jobs }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Success Rate</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ egress_analytics.success_rate }}%</span>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Egress Types</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-body">
-                        {% if egress_analytics.egress_types and egress_analytics.egress_types.values() | sum > 0 %}
-                            <canvas id="egressTypesChart" height="150"></canvas>
-                        {% else %}
-                            <div class="no-data-message">No egress data available.</div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Storage Used</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ egress_analytics.storage_used_gb }}</span>
-                        <span class="metric-unit">GB</span>
-                    </div>
-                    <div class="metric-subtitle text-muted">Estimated usage</div>
-                </div>
-            </div>
-            {% endif %}
-            
-            <div class="mt-3">
-                <a href="/egress" class="btn btn-sm btn-primary">View Egress</a>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Ingress -->
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('ingress')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="ingress-arrow"></i>
-                <span>Ingress</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="ingress-content">
-            {% if ingress_analytics %}
-            <div class="analytics-grid mb-4">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Active Streams</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ ingress_analytics.active_ingress }}</span>
-                    </div>
-                    <div class="metric-details">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Total:</span>
-                            <span>{{ ingress_analytics.total_ingress }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Connection Quality</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ ingress_analytics.connection_stability }}%</span>
-                    </div>
-                    <div class="metric-subtitle text-muted">Stability rate</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Stream Types</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-body">
-                        {% if ingress_analytics.ingress_types and ingress_analytics.ingress_types.values() | sum > 0 %}
-                            <canvas id="ingressTypesChart" height="150"></canvas>
-                        {% else %}
-                            <div class="no-data-message">No ingress data available.</div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Avg Bitrate</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ ingress_analytics.avg_bitrate_mbps }}</span>
-                        <span class="metric-unit">Mbps</span>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    
-    <!-- Telephony -->
-    {% if sip_enabled %}
-    <div class="expandable-section">
-        <button class="expandable-header" onclick="toggleSection('telephony')">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chevron-right section-arrow" id="telephony-arrow"></i>
-                <span>Telephony</span>
-            </div>
-        </button>
-        <div class="expandable-content" id="telephony-content">
-            {% if sip_analytics %}
-            <div class="analytics-grid mb-4">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Total SIP Trunks</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ sip_analytics.total_trunks }}</span>
-                    </div>
-                    <div class="metric-details">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Inbound:</span>
-                            <span>{{ sip_analytics.inbound_trunks }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Outbound:</span>
-                            <span>{{ sip_analytics.outbound_trunks }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Connection Success</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ "%.1f" | format(sip_analytics.connection_success_rate) }}%</span>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Trunk Status</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-body">
-                        {% if sip_analytics.trunk_status and sip_analytics.trunk_status.values() | sum > 0 %}
-                            <canvas id="trunkStatusChart" height="150"></canvas>
-                        {% else %}
-                            <div class="no-data-message">No trunk data available.</div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Dispatch Rules</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ sip_analytics.dispatch_rules }}</span>
-                        <span class="metric-unit">rules</span>
-                    </div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Call Volume</span>
-                        <i class="bi bi-info-circle text-muted"></i>
-                    </div>
-                    <div class="metric-value">
-                        <span class="metric-number">{{ sip_analytics.call_volume }}</span>
-                        <span class="metric-unit">calls</span>
-                    </div>
-                    <div class="metric-subtitle text-muted">Past 24 hours</div>
-                </div>
-            </div>
-            {% else %}
-            <div class="section-placeholder">
-                <p class="text-muted">Loading telephony analytics...</p>
-                <p class="text-muted">If SIP is enabled but no data shows, check server logs for errors.</p>
-            </div>
-            {% endif %}
-            
-            <div class="mt-3">
-                <a href="/sip-outbound" class="btn btn-sm btn-primary me-2">Outbound Calls</a>
-                <a href="/sip-inbound" class="btn btn-sm btn-secondary">Inbound Rules</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <script>
-// Toggle expandable sections
-function toggleSection(sectionId) {
-    const content = document.getElementById(sectionId + '-content');
-    const arrow = document.getElementById(sectionId + '-arrow');
+// Model and voice data from server
+const modelProviders = {{ model_providers | tojson }};
+const voicesByProvider = {{ voices | tojson }};
+
+function updateModels(provider, prefix = '') {
+    const modelSelect = document.getElementById(prefix + 'model');
+    const voiceSelect = document.getElementById(prefix + 'voice');
     
-    if (content.style.display === 'block') {
-        content.style.display = 'none';
-        arrow.style.transform = 'rotate(0deg)';
-    } else {
-        content.style.display = 'block';
-        arrow.style.transform = 'rotate(90deg)';
+    // Update models
+    modelSelect.innerHTML = '';
+    if (modelProviders[provider]) {
+        modelProviders[provider].models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+        });
     }
-}
-
-// Dismiss get started section
-function dismissGetStarted() {
-    document.querySelector('.get-started-section').style.display = 'none';
-}
-
-// Toggle auto refresh
-let autoRefreshEnabled = false;
-function toggleAutoRefresh() {
-    autoRefreshEnabled = !autoRefreshEnabled;
-    const text = document.getElementById('auto-refresh-text');
-    text.textContent = autoRefreshEnabled ? 'Auto-refresh on' : 'Auto-refresh off';
-}
-
-// Initialize charts if data exists
-{% if analytics.platforms %}
-const platformsCtx = document.getElementById('platformsChart');
-if (platformsCtx) {
-    new Chart(platformsCtx, {
-        type: 'doughnut',
-        data: {
-            labels: {{ analytics.platforms.keys() | list | tojson }},
-            datasets: [{
-                data: {{ analytics.platforms.values() | list | tojson }},
-                backgroundColor: ['#5b8bff', '#3b82f6', '#22c55e', '#f59e0b'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
+    
+    // Update voices - use provider specific or fallback to google
+    voiceSelect.innerHTML = '';
+    const voices = voicesByProvider[provider] || voicesByProvider['google'] || [];
+    voices.forEach(voice => {
+        const option = document.createElement('option');
+        option.value = voice;
+        option.textContent = voice;
+        voiceSelect.appendChild(option);
     });
 }
-{% endif %}
 
-{% if analytics.connection_types %}
-const connectionTypeCtx = document.getElementById('connectionTypeChart');
-if (connectionTypeCtx) {
-    new Chart(connectionTypeCtx, {
-        type: 'doughnut',
-        data: {
-            labels: {{ analytics.connection_types.keys() | list | tojson }},
-            datasets: [{
-                data: {{ analytics.connection_types.values() | list | tojson }},
-                backgroundColor: ['#5b8bff', '#3b82f6', '#22c55e'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
+function editAgent(id, name, modelProvider, model, voice, firstMessage, noiseCancellation, n8nMcpUrl, metadata) {
+    document.getElementById('editAgentForm').action = '/agents/' + id + '/update';
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_model_provider').value = modelProvider;
+    
+    // Update models dropdown and select the current model
+    updateModels(modelProvider, 'edit_');
+    document.getElementById('edit_model').value = model;
+    document.getElementById('edit_voice').value = voice;
+    
+    document.getElementById('edit_first_message').value = firstMessage;
+    document.getElementById('edit_noise_cancellation').checked = noiseCancellation;
+    document.getElementById('edit_n8n_mcp_url').value = n8nMcpUrl || '';
+    document.getElementById('edit_metadata').value = metadata || '';
+    
+    new bootstrap.Modal(document.getElementById('editAgentModal')).show();
 }
-{% endif %}
 
-{% if sip_enabled and sip_analytics and sip_analytics.trunk_status %}
-const trunkStatusCtx = document.getElementById('trunkStatusChart');
-if (trunkStatusCtx) {
-    new Chart(trunkStatusCtx, {
-        type: 'doughnut',
-        data: {
-            labels: {{ sip_analytics.trunk_status.keys() | list | tojson }},
-            datasets: [{
-                data: {{ sip_analytics.trunk_status.values() | list | tojson }},
-                backgroundColor: ['#22c55e', '#f59e0b'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
+function confirmDelete(id, name) {
+    document.getElementById('deleteAgentForm').action = '/agents/' + id + '/delete';
+    document.getElementById('deleteAgentName').textContent = name;
+    new bootstrap.Modal(document.getElementById('deleteAgentModal')).show();
 }
-{% endif %}
 
-{% if room_analytics and room_analytics.room_sizes %}
-const roomSizesCtx = document.getElementById('roomSizesChart');
-if (roomSizesCtx) {
-    new Chart(roomSizesCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Small (1-5)', 'Medium (6-20)', 'Large (21+)'],
-            datasets: [{
-                data: [{{ room_analytics.room_sizes.small }}, {{ room_analytics.room_sizes.medium }}, {{ room_analytics.room_sizes.large }}],
-                backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
-}
-{% endif %}
-
-{% if egress_analytics and egress_analytics.egress_types %}
-const egressTypesCtx = document.getElementById('egressTypesChart');
-if (egressTypesCtx) {
-    new Chart(egressTypesCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Room Composite', 'Participant', 'Track', 'Web'],
-            datasets: [{
-                data: [{{ egress_analytics.egress_types.room_composite }}, {{ egress_analytics.egress_types.participant }}, {{ egress_analytics.egress_types.track }}, {{ egress_analytics.egress_types.web }}],
-                backgroundColor: ['#5b8bff', '#22c55e', '#3b82f6', '#f59e0b'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
-}
-{% endif %}
-
-{% if ingress_analytics and ingress_analytics.ingress_types %}
-const ingressTypesCtx = document.getElementById('ingressTypesChart');
-if (ingressTypesCtx) {
-    new Chart(ingressTypesCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['RTMP', 'WHIP', 'URL'],
-            datasets: [{
-                data: [{{ ingress_analytics.ingress_types.rtmp }}, {{ ingress_analytics.ingress_types.whip }}, {{ ingress_analytics.ingress_types.url }}],
-                backgroundColor: ['#ef4444', '#22c55e', '#3b82f6'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
-}
-{% endif %}
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Set initial models for create form
+    updateModels('google');
+});
 </script>
 {% endblock %}
