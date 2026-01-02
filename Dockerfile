@@ -41,7 +41,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY app ./app
 
-# Create non-root user
+# Copy data folder for agent configurations (will be overwritten by volume mount)
+COPY data ./data
+
+# Create non-root user and set permissions
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
 
