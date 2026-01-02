@@ -1,0 +1,260 @@
+{% extends "base.html.j2" %}
+
+{% block title %}Test Agent - LiveKit Dashboard{% endblock %}
+
+{% block page_header %}
+<div class="d-flex justify-content-between align-items-center w-100">
+    <div>
+        <h1 class="page-title">Test Agent: {{ agent.name }}</h1>
+        <div class="page-subtitle">
+            Test your agent in a live room
+        </div>
+    </div>
+    <div>
+        <a href="/agents" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Agents
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-mic-fill text-danger"></i> Live Test Room</h5>
+            </div>
+            <div class="card-body">
+                <div id="test-room-container" style="min-height: 400px; background: #1a1a2e; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <div class="text-center text-white">
+                        <i class="bi bi-headset" style="font-size: 4rem; opacity: 0.5;"></i>
+                        <h4 class="mt-3">Ready to Connect</h4>
+                        <p class="text-muted">Click the button below to join the test room and talk to your agent.</p>
+                        <button id="joinBtn" class="btn btn-lg btn-primary mt-3" onclick="joinRoom()">
+                            <i class="bi bi-telephone-fill"></i> Join Room
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="controls" class="mt-3 d-none">
+                    <div class="d-flex justify-content-center gap-3">
+                        <button id="muteBtn" class="btn btn-outline-light" onclick="toggleMute()">
+                            <i class="bi bi-mic-fill"></i> Mute
+                        </button>
+                        <button id="leaveBtn" class="btn btn-danger" onclick="leaveRoom()">
+                            <i class="bi bi-telephone-x-fill"></i> Leave
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Agent Configuration</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <th>Name</th>
+                        <td>{{ agent.name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Provider</th>
+                        <td>{{ agent.model_provider }}</td>
+                    </tr>
+                    <tr>
+                        <th>Model</th>
+                        <td><code>{{ agent.model }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Voice</th>
+                        <td>{{ agent.voice }}</td>
+                    </tr>
+                    <tr>
+                        <th>Room</th>
+                        <td><code>{{ room_name }}</code></td>
+                    </tr>
+                </table>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-lightbulb"></i> 
+                    <strong>Tip:</strong> The agent should automatically join the room when you connect. 
+                    Make sure your microphone is enabled.
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Transcript</h5>
+            </div>
+            <div class="card-body">
+                <div id="transcript" style="max-height: 300px; overflow-y: auto;">
+                    <p class="text-muted">Conversation will appear here...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"></script>
+<script>
+const LIVEKIT_URL = '{{ livekit_url }}';
+const TOKEN = '{{ token }}';
+const ROOM_NAME = '{{ room_name }}';
+
+let room = null;
+let localParticipant = null;
+
+async function joinRoom() {
+    try {
+        document.getElementById('joinBtn').disabled = true;
+        document.getElementById('joinBtn').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Connecting...';
+        
+        // Create room instance
+        room = new LivekitClient.Room({
+            adaptiveStream: true,
+            dynacast: true,
+        });
+        
+        // Set up event listeners
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+        room.on(LivekitClient.RoomEvent.Disconnected, handleDisconnected);
+        room.on(LivekitClient.RoomEvent.ParticipantConnected, handleParticipantConnected);
+        room.on(LivekitClient.RoomEvent.DataReceived, handleDataReceived);
+        
+        // Connect to room
+        await room.connect(LIVEKIT_URL.replace('https://', 'wss://').replace('http://', 'ws://'), TOKEN);
+        
+        localParticipant = room.localParticipant;
+        
+        // Enable microphone
+        await localParticipant.setMicrophoneEnabled(true);
+        
+        // Update UI
+        document.getElementById('test-room-container').innerHTML = `
+            <div class="text-center text-white">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                <h4 class="mt-3">Connected to ${ROOM_NAME}</h4>
+                <p>Waiting for agent to join...</p>
+                <div id="participants" class="mt-3"></div>
+            </div>
+        `;
+        document.getElementById('controls').classList.remove('d-none');
+        
+        addToTranscript('System', 'Connected to room. Waiting for agent...');
+        
+    } catch (error) {
+        console.error('Failed to join room:', error);
+        document.getElementById('joinBtn').disabled = false;
+        document.getElementById('joinBtn').innerHTML = '<i class="bi bi-telephone-fill"></i> Join Room';
+        alert('Failed to connect: ' + error.message);
+    }
+}
+
+function handleTrackSubscribed(track, publication, participant) {
+    if (track.kind === 'audio') {
+        const audioElement = track.attach();
+        document.body.appendChild(audioElement);
+    }
+    updateParticipants();
+}
+
+function handleParticipantConnected(participant) {
+    addToTranscript('System', `${participant.identity} joined the room`);
+    updateParticipants();
+}
+
+function handleDisconnected() {
+    addToTranscript('System', 'Disconnected from room');
+    document.getElementById('controls').classList.add('d-none');
+}
+
+function handleDataReceived(payload, participant) {
+    try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.text) {
+            addToTranscript(participant?.identity || 'Agent', data.text);
+        }
+    } catch (e) {
+        // Ignore non-JSON data
+    }
+}
+
+function updateParticipants() {
+    if (!room) return;
+    
+    const participantsDiv = document.getElementById('participants');
+    if (!participantsDiv) return;
+    
+    let html = '<div class="d-flex justify-content-center gap-3">';
+    
+    // Add local participant
+    html += `<div class="participant-badge"><i class="bi bi-person-fill"></i> You</div>`;
+    
+    // Add remote participants
+    room.remoteParticipants.forEach((participant) => {
+        html += `<div class="participant-badge"><i class="bi bi-robot"></i> ${participant.identity}</div>`;
+    });
+    
+    html += '</div>';
+    participantsDiv.innerHTML = html;
+}
+
+function toggleMute() {
+    if (!localParticipant) return;
+    
+    const isMuted = localParticipant.isMicrophoneEnabled;
+    localParticipant.setMicrophoneEnabled(!isMuted);
+    
+    const btn = document.getElementById('muteBtn');
+    if (isMuted) {
+        btn.innerHTML = '<i class="bi bi-mic-fill"></i> Mute';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-outline-light');
+    } else {
+        btn.innerHTML = '<i class="bi bi-mic-mute-fill"></i> Unmute';
+        btn.classList.remove('btn-outline-light');
+        btn.classList.add('btn-danger');
+    }
+}
+
+async function leaveRoom() {
+    if (room) {
+        await room.disconnect();
+        room = null;
+    }
+    window.location.href = '/agents';
+}
+
+function addToTranscript(speaker, text) {
+    const transcript = document.getElementById('transcript');
+    const entry = document.createElement('div');
+    entry.className = 'transcript-entry mb-2';
+    entry.innerHTML = `<strong>${speaker}:</strong> ${text}`;
+    transcript.appendChild(entry);
+    transcript.scrollTop = transcript.scrollHeight;
+}
+</script>
+
+<style>
+.participant-badge {
+    background: rgba(255,255,255,0.1);
+    padding: 8px 16px;
+    border-radius: 20px;
+    color: white;
+}
+.transcript-entry {
+    padding: 8px;
+    background: var(--lk-card-bg);
+    border-radius: 4px;
+    border-left: 3px solid var(--lk-primary);
+}
+</style>
+{% endblock %}
